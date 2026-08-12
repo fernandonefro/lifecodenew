@@ -1,0 +1,316 @@
+// LIFECODE SaMD PLATFORM - ENTERPRISE PRISMA SCHEMA (LGPD, FHIR & ANALYTICS COMPLIANT)
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum Role {
+  PACIENTE
+  CUIDADOR
+  MEDICO
+  NAVEGADOR
+  GESTOR_CLINICA
+  ANALISTA_OPERADORA
+  ADMIN
+}
+
+enum ConsentScope {
+  TCLE_TERMS_OF_SERVICE
+  PRIVACY_POLICY_LGPD
+  DATA_SHARING_PHYSICIAN
+  DATA_SHARING_CAREGIVER
+  ANONYMIZED_RESEARCH
+}
+
+enum ObservationType {
+  BLOOD_GLUCOSE
+  BLOOD_PRESSURE
+  HBA1C
+  BODY_WEIGHT
+  INSULIN_DOSE
+  CARBOHYDRATE_INTAKE
+}
+
+enum SourceType {
+  CGM
+  FLASH
+  CAPILLARY
+  MANUAL
+  LABORATORY
+  BLE_DIRECT
+  CLOUD_API_DEXCOM
+  CLOUD_API_LIBRE
+}
+
+enum ValidationStatus {
+  VALIDATED
+  NOISY
+  OUT_OF_BOUNDS
+  PRELIMINARY
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum RiskTier {
+  TIER_1_HIGH
+  TIER_2_MODERATE
+  TIER_3_LOW
+}
+
+enum CareGapStatus {
+  OVERDUE
+  SCHEDULED
+  CLOSED
+}
+
+enum CareGapType {
+  HBA1C_OVERDUE
+  EGFR_OVERDUE
+  RETINA_EXAM_OVERDUE
+  FOOT_EXAM_OVERDUE
+  PHYSICIAN_VISIT_OVERDUE
+}
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  code      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  users                User[]
+  patients             Patient[]
+  clinicalObservations ClinicalObservation[]
+  alerts               Alert[]
+  careGaps             CareGap[]
+  populationMetrics    PopulationMetric[]
+  riskStratifications  RiskStratification[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  cpf          String?  @unique
+  phone        String?
+  role         Role     @default(PACIENTE)
+  mfaEnabled   Boolean  @default(false)
+  mfaSecret    String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient     Patient?
+  sessions    Session[]
+  consentLogs ConsentLog[]
+  auditLogs   AuditLog[]
+
+  @@index([tenantId, role])
+  @@index([tenantId, email])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  ipAddress String
+  userAgent String
+  revoked   Boolean  @default(false)
+  expiresAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revoked])
+  @@map("sessions")
+}
+
+model ConsentLog {
+  id            String       @id @default(uuid()) @db.Uuid
+  userId        String       @db.Uuid
+  scope         ConsentScope
+  policyVersion String       @default("1.0.0")
+  accepted      Boolean      @default(true)
+  acceptedAtUtc DateTime     @default(now()) @db.Timestamptz(6)
+  revokedAtUtc  DateTime?    @db.Timestamptz(6)
+  ipAddress     String
+  userAgent     String
+  signatureHash String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, scope, accepted])
+  @@map("consent_logs")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  userId        String?  @db.Uuid
+  action        String
+  resource      String
+  ipAddress     String
+  userAgent     String
+  previousValue Json?
+  newValue      Json?
+  hmacSignature String
+  timestampUtc  DateTime @default(now()) @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, timestampUtc(sort: Desc)])
+  @@index([tenantId, action])
+  @@index([userId, timestampUtc(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model Patient {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @db.Uuid
+  userId                String   @unique @db.Uuid
+  mrn                   String?
+  birthDate             DateTime @db.Date
+  gender                String
+  diabetesType          String   @default("TYPE_1")
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinicalObservations ClinicalObservation[]
+  alerts               Alert[]
+  careGaps             CareGap[]
+  riskStratifications  RiskStratification[]
+
+  @@index([tenantId, mrn])
+  @@map("patients")
+}
+
+model ClinicalObservation {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @db.Uuid
+  patientId        String           @db.Uuid
+  externalEventId  String           @unique
+  loincCode        String           @default("15074-8")
+  value            Decimal          @db.Decimal(8, 2)
+  unit             String           @default("mg/dL")
+  sourceType       SourceType       @default(MANUAL)
+  context          String?
+  deviceId         String?
+  validationStatus ValidationStatus @default(VALIDATED)
+  measuredAt       DateTime         @db.Timestamptz(6)
+  ingestedAt       DateTime         @default(now()) @db.Timestamptz(6)
+  metadata         Json?
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, patientId, measuredAt(sort: Desc)])
+  @@index([tenantId, externalEventId])
+  @@map("clinical_observations")
+}
+
+model Alert {
+  id            String      @id @default(uuid()) @db.Uuid
+  tenantId      String      @db.Uuid
+  patientId     String      @db.Uuid
+  observationId String?     @db.Uuid
+  severity      String      // "P0", "P1", "P2", "P3"
+  status        AlertStatus @default(OPEN)
+  title         String
+  message       String
+  dueDate       DateTime    @db.Timestamptz(6)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, severity, status])
+  @@index([patientId, status])
+  @@map("alerts")
+}
+
+// ============================================================================
+// PORTAL DA OPERADORA: ESTRATIFICAÇÃO, LACUNAS DE CUIDADO & UTILIZAÇÃO
+// ============================================================================
+
+model CareGap {
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @db.Uuid
+  patientId       String        @db.Uuid
+  gapType         CareGapType
+  title           String
+  description     String
+  loincCode       String?
+  dueDate         DateTime      @db.Timestamptz(6)
+  lastPerformedAt DateTime?     @db.Timestamptz(6)
+  status          CareGapStatus @default(OVERDUE)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, gapType, status])
+  @@index([patientId, status])
+  @@map("care_gaps")
+}
+
+model RiskStratification {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  patientId     String   @db.Uuid
+  tier          RiskTier @default(TIER_3_LOW)
+  riskScore     Int      @default(0) // 0 a 100
+  hba1cValue    Decimal? @db.Decimal(4, 2)
+  tirPercentage Int?     // % Time in Range (70-180 mg/dL)
+  calculatedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tier])
+  @@index([patientId, calculatedAt(sort: Desc)])
+  @@map("risk_stratifications")
+}
+
+model PopulationMetric {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @db.Uuid
+  periodMonth             String   // e.g. "2026-08"
+  totalBeneficiaries       Int
+  tier1Count              Int
+  tier2Count              Int
+  tier3Count              Int
+  erVisitsCount           Int
+  hospitalizationsCount   Int
+  erRatePerThousand       Decimal  @db.Decimal(8, 2)
+  inpatientRatePerThousand Decimal  @db.Decimal(8, 2)
+  calculatedAt            DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, periodMonth])
+  @@map("population_metrics")
+}

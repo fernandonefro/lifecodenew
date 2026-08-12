@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info:
+  title: Lifecode SaMD Platform Core APIs - MVP Critical Endpoints
+  description: |
+    API OpenAPI 3.0 para ingestão de dados clínicos de glicemia (conforme contrato da Seção 8.3 do PRD com idempotência e rastreabilidade de proveniência) 
+    e Fila de Alertas de Emergência Triada por Prioridade (P0 a P3) para o Portal Profissional (RF-16 e US-13).
+  version: 1.0.0-SaMD-MVP
+  contact:
+    name: Lifecode SaMD Engineering Team
+    email: api-regulatory@lifecode.health
+
+servers:
+  - url: https://api.lifecode.health/v1
+    description: Production SaMD Encrypted Cluster (TLS 1.3)
+  - url: https://sandbox.lifecode.health/v1
+    description: Staging / Regulatory Test Environment
+
+security:
+  - OAuth2Bearer: []
+  - TenantIdHeader: []
+
+paths:
+  /fhir/Observation/ingest:
+    post:
+      summary: Ingestão Idempotente de Leituras Glicêmicas (CGM / BGM)
+      operationId: ingestGlucoseReadings
+      headers:
+        X-Idempotency-Key:
+          schema:
+            type: string
+            format: uuid
+          required: true
+        X-Device-Id:
+          schema:
+            type: string
+          required: true
+        X-Tenant-Id:
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlucoseIngestionPayload'
+      responses:
+        '201':
+          description: Leitura(s) processada(s) com sucesso.
+        '400':
+          description: Erro de validação.
+        '409':
+          description: Idempotency conflict.
+        '422':
+          description: Out-of-bounds physiological limit.
+
+  /alerts/queue:
+    get:
+      summary: Fila de Alertas de Saúde por Prioridade (Portal Médico - RF-16 / US-13)
+      operationId: getPriorityAlertQueue
+      parameters:
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [P0_CRITICAL, P1_HIGH, P2_MEDIUM, P3_LOW]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [UNACKNOWLEDGED, ACKNOWLEDGED, RESOLVED]
+      responses:
+        '200':
+          description: Lista de alertas triada.
+
+components:
+  securitySchemes:
+    OAuth2Bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    TenantIdHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-Id
+
+  schemas:
+    GlucoseIngestionPayload:
+      type: object
+      required:
+        - patientId
+        - source
+        - readings
+      properties:
+        patientId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum: [BLE_DIRECT, CLOUD_API_DEXCOM, CLOUD_API_LIBRE, MANUAL_ENTRY]
+        readings:
+          type: array
+          items:
+            type: object
+            required:
+              - timestamp
+              - valueMgDl
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              valueMgDl:
+                type: number

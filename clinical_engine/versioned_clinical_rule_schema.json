@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LifecodeVersionedClinicalRule",
+  "description": "Estrutura de dados para Regra Clínica Versionada SaMD em conformidade com IEC 62304 Class C e ISO 14971",
+  "type": "object",
+  "required": [
+    "ruleId",
+    "version",
+    "status",
+    "samdSafetyClass",
+    "effectivePeriod",
+    "clinicalMetadata",
+    "conditions",
+    "action"
+  ],
+  "properties": {
+    "ruleId": { "type": "string", "example": "RULE-GLUCOSE-P0-SEVERE-HYPO" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "example": "1.2.0" },
+    "status": { "type": "string", "enum": ["DRAFT", "CLINICALLY_APPROVED", "ACTIVE_PRODUCTION", "DEPRECATED"] },
+    "samdSafetyClass": { "type": "string", "enum": ["IEC_62304_CLASS_A", "IEC_62304_CLASS_B", "IEC_62304_CLASS_C"] },
+    "anvisaClearanceHash": { "type": "string" },
+    "effectivePeriod": {
+      "type": "object",
+      "required": ["validFrom"],
+      "properties": {
+        "validFrom": { "type": "string", "format": "date-time" },
+        "validTo": { "type": "string", "format": "date-time" }
+      }
+    },
+    "clinicalMetadata": {
+      "type": "object",
+      "required": ["name", "clinicalRationale", "medicalReference", "approvedByPractitionerId"],
+      "properties": {
+        "name": { "type": "string" },
+        "clinicalRationale": { "type": "string" },
+        "medicalReference": { "type": "string" },
+        "approvedByPractitionerId": { "type": "string", "format": "uuid" }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "required": ["operator"],
+      "properties": {
+        "operator": { "type": "string", "enum": ["AND", "OR"] },
+        "glucoseThresholdMgDl": {
+          "type": "object",
+          "properties": {
+            "comparison": { "type": "string", "enum": ["LESS_THAN", "GREATER_THAN", "BETWEEN"] },
+            "value": { "type": "number" },
+            "upperValue": { "type": "number" }
+          }
+        },
+        "trendArrows": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "durationMinutesSustained": { "type": "integer" },
+        "requiredSymptoms": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["severityLevel", "alarmSoundPattern", "escalationWindowSeconds"],
+      "properties": {
+        "severityLevel": { "type": "string", "enum": ["P0_CRITICAL", "P1_HIGH", "P2_MEDIUM", "P3_LOW"] },
+        "alarmSoundPattern": { "type": "string" },
+        "overrideDoNotDisturb": { "type": "boolean" },
+        "escalationWindowSeconds": { "type": "integer" },
+        "escalationChannels": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

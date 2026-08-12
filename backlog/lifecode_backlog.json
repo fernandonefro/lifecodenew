@@ -1,0 +1,616 @@
+{
+  "project": {
+    "name": "Lifecode Diabetes Management & Care Platform",
+    "domain": "Digital Health / SaMD (Software as a Medical Device)",
+    "north_star_metric": "Time in Range (TIR) médio do paciente ≥ 70% mantido por +90 dias sem episódios de hipoglicemia grave (< 54 mg/dL)",
+    "regulatory_standards": [
+      "ANVISA RDC 751/2022 (SaMD)",
+      "IEC 62304:2006/AMD1:2015 (Medical device software)",
+      "ISO 14971:2019 (Risk management to medical devices)",
+      "LGPD (Lei 13.709/2018 - Dados Sensíveis de Saúde)",
+      "HIPAA Compliance",
+      "Resolução CFM nº 2.314/2022 (Telemedicina)"
+    ]
+  },
+  "epics": [
+    {
+      "epic_id": "EPIC-01",
+      "name": "Gestão de Identidade, Autenticação Segura & Conformidade LGPD/HIPAA",
+      "description": "Infraestrutura de autenticação resiliente, controle de acessos (RBAC) e gestão de consentimentos de saúde.",
+      "user_stories": [
+        {
+          "story_id": "US-01",
+          "title": "Cadastro & Autenticação Segura do Paciente com MFA",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class A (Non-harm / Administrative)",
+          "iso_14971_mitigation": "Mitiga acesso não autorizado a PHI (Protected Health Information) e adulteração de parâmetros de dosagem.",
+          "summary": "Como paciente, quero me cadastrar e autenticar usando biometria e MFA para proteger meus dados sensíveis de glicemia.",
+          "acceptance_criteria": [
+            "GIVEN que um novo paciente acessa o app, WHEN ele realiza o cadastro, THEN deve assinar digitalmente o Termo de Consentimento Livre e Esclarecido (TCLE/TALE) LGPD.",
+            "GIVEN um login existente, WHEN o paciente tenta entrar em um dispositivo não reconhecido, THEN o sistema deve solicitar autenticação MFA (TOTP ou SMS/E-mail de 6 dígitos).",
+            "GIVEN falha de rede, WHEN o token de acesso expira, THEN a renovação via Refresh Token seguro deve ocorrer de forma transparente sem perda de dados digitados."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-01-01",
+              "title": "Implementar Serviço de Autenticação OAuth2 + OpenID Connect com MFA",
+              "component": "Backend / Security",
+              "story_points": 5,
+              "subtasks": [
+                "Configurar Auth0/Cognito/Keycloak com suporte a TOTP e biometria nativa",
+                "Implementar rota POST /api/v1/auth/register com hash Argon2id para senhas",
+                "Criar middleware de interceptação de tokens JWT com verificação de escopos RBAC"
+              ]
+            },
+            {
+              "task_id": "TASK-01-02",
+              "title": "Interface Mobile de Login, Cadastro e Consentimento LGPD",
+              "component": "Frontend Mobile",
+              "story_points": 3,
+              "subtasks": [
+                "Criar tela de onboarding com aceite obrigatório de termos LGPD com versão rastreável",
+                "Integrar suporte a FaceID / TouchID via Keychain/Keystore local"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-14",
+          "title": "Trilha de Auditoria & Audit Log Imutável de Ações Clínicas",
+          "role": "Administrador / Auditor de Qualidade",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Garante rastreabilidade total de modificações de dosagem, prescrições e parâmetros de segurança (Não-repúdio).",
+          "summary": "Como auditor de qualidade/regulatório, quero registrar imutavelmente todas as alterações de dados de saúde para conformidade com a IEC 62304 e LGPD.",
+          "acceptance_criteria": [
+            "GIVEN qualquer alteração em parâmetro clínico (ex: Fator de Sensibilidade à Insulina), WHEN a ação ocorre, THEN deve ser gravado um log assinado criptograficamente com timestamp UTC, User ID, IP e Valor Anterior/Novo.",
+            "GIVEN a necessidade de auditoria, WHEN o Admin solicita logs, THEN os registros devem ser exportáveis sem possibilidade de edição ou deleção."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-14-01",
+              "title": "Desenvolver Audit Service com Log Append-Only e HMAC Validation",
+              "component": "Backend / Data",
+              "story_points": 5,
+              "subtasks": [
+                "Criar tabela/coleção audit_logs com imutabilidade enforced em nível de banco de dados",
+                "Implementar decorator/interceptor em Python/Node/Go para capturar mutations de dados sensíveis",
+                "Configurar exportação assíncrona de logs para S3 WORM (Write Once Read Many)"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-15",
+          "title": "Gestão de Revogação de Consentimento & Direitos do Titular (LGPD)",
+          "role": "Paciente / Encarregado DPO",
+          "priority": "P0",
+          "samd_safety_class": "Class A",
+          "iso_14971_mitigation": "Evita retenção indevida ou compartilhamento não autorizado de dados clínicos sensíveis.",
+          "summary": "Como paciente, quero poder revogar o compartilhamento dos meus dados com médicos específicos ou solicitar exportação/anonimização.",
+          "acceptance_criteria": [
+            "GIVEN o painel de privacidade, WHEN o paciente desativa o acesso de um médico X, THEN o médico X perde imediatamente o acesso ao prontuário no próximo request.",
+            "GIVEN uma solicitação de exclusão, WHEN processada pelo DPO, THEN os dados pessoais identificáveis são anonimizados mantendo apenas dados agregados para auditoria SaMD."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-15-01",
+              "title": "Motor de Políticas de Privacidade e Anonimização de PHI",
+              "component": "Backend",
+              "story_points": 5,
+              "subtasks": [
+                "Criar tabela de consentimentos ativos e revogados vinculados ao RBAC",
+                "Implementar job de anonimização (k-anonymity / pseudonimização) para solicitações de exclusão"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-28",
+          "title": "Controle de Acesso Baseado em Papéis (RBAC) Multidisciplinar",
+          "role": "Administrador",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Impede a alteração não autorizada de parâmetros clínicos por profissionais sem permissão legal.",
+          "summary": "Como administrador, quero definir papéis distintos (Médico, Educador, Cuidador, Paciente) com permissões granulares.",
+          "acceptance_criteria": [
+            "GIVEN um usuário com perfil 'Educador', WHEN ele tenta alterar a Meta de Glicemia Basal, THEN o sistema bloqueia e emite alerta de permissão negada.",
+            "GIVEN um usuário com perfil 'Médico', WHEN ele acessa o paciente sob sua guarda, THEN ele possui permissão total de leitura e prescrição."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-28-01",
+              "title": "Implementar RBAC com Escopos Granulares de Saúde",
+              "component": "Backend / Security",
+              "story_points": 3,
+              "subtasks": [
+                "Mapear permissões: READ_PHI, WRITE_PRESCRIÇÃO, EDIT_TARGETS, VIEW_ALERTS",
+                "Implementar middleware de autorização nos endpoints clínicos da API"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "epic_id": "EPIC-02",
+      "name": "Coleta, Ingestão & Sincronização de Dados de Glicemia e Insumos",
+      "description": "Ingestão em tempo real de sensores contínuos (CGM), glicômetros (BGM), entradas manuais e resiliência offline.",
+      "user_stories": [
+        {
+          "story_id": "US-03",
+          "title": "Registro Manual de Glicemia Capilar (BGM) e Ingestão com Validação",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Validação de limites de entrada fisiológicos para prevenir erros de digitação (ex: 4500 mg/dL ao invés de 450 mg/dL).",
+          "summary": "Como paciente, quero registrar manualmente minhas medições de glicemia capilar com validações de segurança contra erros de digitação.",
+          "acceptance_criteria": [
+            "GIVEN o formulário de registro, WHEN o paciente digita um valor < 20 mg/dL ou > 600 mg/dL, THEN o sistema exibe alerta de confirmação obrigatória.",
+            "GIVEN o envio de um registro válido (ex: 110 mg/dL postprandial), WHEN confirmado, THEN a leitura é salva localmente e enviada ao backend com marcação de contexto (jejum, pré-prandial, pós-prandial)."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-03-01",
+              "title": "Desenvolver Tela e Form de Entrada Glicêmica com Validação Fisiológica",
+              "component": "Frontend Mobile",
+              "story_points": 3,
+              "subtasks": [
+                "Criar componente UI numérico com feedback tátil e visual (verde/amarelo/vermelho)",
+                "Implementar validação de limites ISO 14971 (Hard Limit: 10 a 700 mg/dL)"
+              ]
+            },
+            {
+              "task_id": "TASK-03-02",
+              "title": "API de Ingestão de Leitura de Glicemia",
+              "component": "Backend",
+              "story_points": 3,
+              "subtasks": [
+                "Criar endpoint POST /api/v1/glucose/readings",
+                "Integrar com fila de mensageria para processamento de alertas em tempo real"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-04",
+          "title": "Ingestão Contínua & Conectividade BLE/API de Sensores CGM",
+          "role": "Paciente / Sistema",
+          "priority": "P0",
+          "samd_safety_class": "Class C",
+          "iso_14971_mitigation": "Processamento contínuo sem perda de pacotes; detecção imediata de gap de leitura CGM.",
+          "summary": "Como paciente, quero que minhas leituras do sensor contínuo (CGM - Libre/Dexcom) sejam sincronizadas em tempo real via Bluetooth ou API cloud.",
+          "acceptance_criteria": [
+            "GIVEN o sensor CGM pareado via BLE, WHEN uma nova leitura é transmitida (a cada 1 ou 5 min), THEN a curva de glicemia e a seta de tendência (trend arrow) são atualizadas na tela.",
+            "GIVEN uma perda de conexão BLE por mais de 15 minutos, THEN o sistema notifica o paciente sobre o desconexão do sensor."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-04-01",
+              "title": "Desenvolver Driver BLE Background para Conexão com CGM",
+              "component": "Mobile Firmware/BLE",
+              "story_points": 8,
+              "subtasks": [
+                "Implementar serviço nativo Android (Foreground Service) e iOS (Background BLE) para leitura contínua",
+                "Parser de pacotes binários de glicemia conforme especificação GATT Glucose Profile",
+                "Tratamento de reconexão automática e retry exponencial em caso de desconexão"
+              ]
+            },
+            {
+              "task_id": "TASK-04-02",
+              "title": "Conector OAuth2/API Cloud para Dexcom / Freestyle Libre (LibreView / Nightscout Bridge)",
+              "component": "Backend Integration",
+              "story_points": 5,
+              "subtasks": [
+                "Criar Worker de polling/webhook para ingerir streams da API Partner Dexcom/Libre",
+                "Normalizar timestamps e calibração de dados CGM no banco de séries temporais"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-07",
+          "title": "Registro de Aplicação de Insulina (Basal & Bolus)",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class C",
+          "iso_14971_mitigation": "Garante diferenciação clara entre Insulina Basal (Lenta) e Bolus (Rápida) para evitar superdosagem acidental.",
+          "summary": "Como paciente, quero registrar aplicações de insulina indicando o tipo (Rápida/Lenta), dosagem e horário.",
+          "acceptance_criteria": [
+            "GIVEN o registro de dose, WHEN o paciente seleciona o tipo de insulina, THEN a interface altera visualmente a cor e o ícone de forma inconfundível.",
+            "GIVEN o lançamento da dosagem, WHEN ultrapassa o limite diário pré-configurado pelo médico, THEN é exibido aviso de confirmação dupla."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-07-01",
+              "title": "Componente Mobile de Log de Insulina e Validação de Dose Máxima",
+              "component": "Frontend Mobile",
+              "story_points": 3,
+              "subtasks": [
+                "Desenvolver picker de dosagem com incremento de 0.5U / 1.0U",
+                "Integrar alerta visual de prevenção de erro de tipo de insulina"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-25",
+          "title": "Sincronização Off-line e Resiliência Local de Dados Mobile",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Previne perda de dados críticos de glicemia em áreas sem cobertura de internet.",
+          "summary": "Como paciente em local sem conexão, quero continuar registrando medições e receber alertas locais sem falhas.",
+          "acceptance_criteria": [
+            "GIVEN o app sem sinal de internet, WHEN o paciente registra glicemia ou dose, THEN os dados são armazenados de forma criptografada em banco SQLite/Realm local.",
+            "GIVEN o restabelecimento da conexão, WHEN o app detecta rede, THEN o mecanismo de sync envia a fila pendente sem duplicar registros (idempotência)."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-25-01",
+              "title": "Implementar Sync Engine Offline-First com Banco Criptografado (SQLCipher)",
+              "component": "Frontend Mobile",
+              "story_points": 8,
+              "subtasks": [
+                "Configurar banco SQLite criptografado com SQLCipher no aplicativo",
+                "Implementar fila de sincronização (Outbox Pattern) com verificação de UUID único por leitura",
+                "Criar algoritmo de resolução de conflitos de timestamps durante o re-sync"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-26",
+          "title": "Sistema de Monitoramento de Falhas e Integridade de Sensores",
+          "role": "Sistema / Engenharia de Qualidade",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Identifica ruído no sensor ou degradação do eletrodo para alertar sobre medições não confiáveis.",
+          "summary": "Como sistema de saúde, quero avaliar a integridade dos dados transmitidos pelo sensor para alertar quando as medições estiverem ruidosas ou inconsistentes.",
+          "acceptance_criteria": [
+            "GIVEN uma sequência de leituras com variações > 50 mg/dL em intervalos de 1 min (impossível fisiologicamente), WHEN o algoritmo analisa os dados, THEN marca a leitura como 'Ruidosa / Não Confiável' e orienta o paciente a realizar glicemia capilar de confirmação."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-26-01",
+              "title": "Algoritmo de Detecção de Anomalias de Sensor e Ruído Fisiológico",
+              "component": "Backend Data Processing",
+              "story_points": 5,
+              "subtasks": [
+                "Implementar filtro de média móvel e detecção de gradiente excessivo (dG/dt)",
+                "Criar notificação no app: 'Sensor inconsistente: Por favor faça teste de ponta de dedo'"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "epic_id": "EPIC-03",
+      "name": "Motor Clínico SaMD, Calculador de Bolus & Suporte à Decisão",
+      "description": "Algoritmos de calculador de dosagem de insulina, recomendações personalizadas e gestão de perfis clínicos.",
+      "user_stories": [
+        {
+          "story_id": "US-02",
+          "title": "Perfil Clínico do Paciente & Configuração de Parâmetros de Prescrição",
+          "role": "Médico / Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class C",
+          "iso_14971_mitigation": "Evita cálculo de bolus com parâmetros desatualizados ou sem validação médica.",
+          "summary": "Como médico/paciente, quero cadastrar e atualizar metas glicêmicas (ex: 70-180 mg/dL), Fator de Sensibilidade (FSI) e Razão Carboidrato/Insulina (RCI).",
+          "acceptance_criteria": [
+            "GIVEN o perfil do paciente, WHEN o médico atualiza a RCI (ex: 1U para 10g carb), THEN o novo parâmetro só entra em vigor após confirmação e assinatura digital.",
+            "GIVEN o histórico de parâmetros, WHEN alterados, THEN o histórico completo de versões fica registrado para rastreabilidade."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-02-01",
+              "title": "API de Gestão de Parâmetros Clínicos Versionados",
+              "component": "Backend",
+              "story_points": 5,
+              "subtasks": [
+                "Criar esquema de banco clinical_parameters com versionamento temporal (effective_from, effective_to)",
+                "Implementar trava de alteração exclusiva para usuários com perfil Médico responsável"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-05",
+          "title": "Calculador Sugerido de Dose de Bolus (Bolus Calculator - SaMD)",
+          "role": "Paciente / Sistema",
+          "priority": "P0",
+          "samd_safety_class": "Class C (High Risk SaMD)",
+          "iso_14971_mitigation": "Desconto rigoroso de Insulina Ativa a bordo (IOB - Insulin on Board) para evitar stacking de insulina e hipoglicemia fatal.",
+          "summary": "Como paciente prestes a se alimentar ou corrigir glicemia alta, quero um cálculo preciso sugerido de bolus considerando carboidratos, glicemia atual e IOB.",
+          "acceptance_criteria": [
+            "GIVEN Glicemia Atual = 220 mg/dL, Meta = 100 mg/dL, FSI = 40, Carboidratos = 50g, RCI = 10, e IOB = 1.5U, WHEN o calculador é acionado, THEN a dose sugerida deve ser calculada exatamente como: ((220-100)/40 + 50/10) - 1.5 = (3.0 + 5.0) - 1.5 = 6.5 U de insulina rápida.",
+            "GIVEN o valor calculado, WHEN exibido ao paciente, THEN o sistema deve mostrar o aviso obrigatório SaMD: 'Esta é uma sugestão. Confirme os valores antes de aplicar'.",
+            "GIVEN o resultado, WHEN a IOB é superior ao bolus de correção necessário, THEN a correção deve ser zerada para evitar hipoglicemia."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-05-01",
+              "title": "Desenvolver Motor Algorítmico Determinístico do Calculador de Bolus (IEC 62304 Class C)",
+              "component": "Backend Clinical Engine",
+              "story_points": 8,
+              "subtasks": [
+                "Implementar fórmula matemática de Bolus (Correção + Alimentação - IOB) em módulo isolado e unitariamente testado (100% code coverage)",
+                "Implementar algoritmo curvilíneo de decaimento de Insulina Ativa (IOB) baseado em modelos biológicos (ex: modelo de Mudaliar / Walsh)",
+                "Criar suite de testes automatizados com 500+ cenários clínicos extremos (edge cases)"
+              ]
+            },
+            {
+              "task_id": "TASK-05-02",
+              "title": "Interface SaMD de Aprovação e Aplicação de Dose sugerida",
+              "component": "Frontend Mobile",
+              "story_points": 5,
+              "subtasks": [
+                "Criar tela de Bolus com detalhamento claro dos componentes (Carboidratos, Correção, IOB descontado)",
+                "Exigir etapa de confirmação explícita do usuário antes de registrar o log de aplicação"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-06",
+          "title": "Registro de Carboidratos & Tabela Nutricional Integrada",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Previne erro de estimativa nutricional fornecendo tabela padronizada (TACO / USDA).",
+          "summary": "Como paciente, quero selecionar alimentos de uma base padronizada ou informar os gramas de carboidrato diretamente.",
+          "acceptance_criteria": [
+            "GIVEN a busca por alimento (ex: 'Arroz branco cozido 100g'), WHEN selecionado, THEN o app preenche automaticamente 28g de carboidratos com opção de ajustar a porção."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-06-01",
+              "title": "Serviço de Busca Nutricional e Cálculo de Carboidratos por Porção",
+              "component": "Backend / Database",
+              "story_points": 3,
+              "subtasks": [
+                "Integrar tabela nutricional TACO/IBGE em banco SQLite/Elasticsearch local e remoto",
+                "Criar interface de busca com autocompletar ultra-rápido (< 50ms)"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-27",
+          "title": "Controle de Versão & Deploy Seguro do Algoritmo Clínico (SaMD Release)",
+          "role": "DevOps / Engenharia Biomédica",
+          "priority": "P0",
+          "samd_safety_class": "Class C",
+          "iso_14971_mitigation": "Evita deploy acidental de versão não validada do algoritmo em produção.",
+          "summary": "Como engenheiro de qualidade SaMD, quero garantir que atualizações do algoritmo de Bolus passem por testes de regressão automatizados e aprovação formal.",
+          "acceptance_criteria": [
+            "GIVEN uma alteração no código do calculador, WHEN acionado o pipeline CI/CD, THEN 100% dos testes clínicos devem passar antes de autorizar o deploy.",
+            "GIVEN uma versão publicada em prod, WHEN em execução, THEN o log deve conter o hash SHA256 exato da versão do algoritmo aprovada pela ANVISA."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-27-01",
+              "title": "Pipeline CI/CD com Gate de Validação Clínica Automatizada",
+              "component": "DevOps / Infrastructure",
+              "story_points": 5,
+              "subtasks": [
+                "Configurar GitHub Actions / GitLab CI com execução de matriz de verificação matemática",
+                "Implementar Feature Flags em nível de versão de algoritmo clínico com rollback instantâneo"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "epic_id": "EPIC-04",
+      "name": "Gestão de Alertas Críticos de Emergência & Rede de Apoio",
+      "description": "Notificação em tempo real de hipoglicemia severa e hiperglicemia com cetoacidose potencial para o paciente e cuidadores.",
+      "user_stories": [
+        {
+          "story_id": "US-09",
+          "title": "Motor de Alertas de Hipoglicemia e Hiperglicemia Crítica",
+          "role": "Paciente / Sistema",
+          "priority": "P0",
+          "samd_safety_class": "Class C (Life-Critical Alert)",
+          "iso_14971_mitigation": "Garante alerta sonoro imediato mesmo com smartphone no modo 'Não Perturbe' (Critical Alert Entitlement).",
+          "summary": "Como paciente, quero receber alertas sonoros com prioridade máxima quando minha glicemia cair abaixo de 54 mg/dL ou subir acima de 300 mg/dL com tendência de alta.",
+          "acceptance_criteria": [
+            "GIVEN leitura de glicemia ≤ 54 mg/dL, WHEN o app recebe a medição, THEN deve disparar um som de alarme contínuo de alta prioridade que se sobrepõe ao modo silencioso do sistema operacional.",
+            "GIVEN o alarme não reconhecido pelo paciente em 3 minutos, THEN o sistema deve escalar automaticamente a notificação para a rede de cuidadores cadastrados."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-09-01",
+              "title": "Motor Local e Cloud de Disparo de Alertas de Emergência",
+              "component": "Backend / Mobile",
+              "story_points": 8,
+              "subtasks": [
+                "Configurar Push Notifications de alta prioridade via FCM / APNs Critical Alerts (iOS Approval Required)",
+                "Implementar worker backend de monitoramento com checagem a cada 30 segundos",
+                "Integrar serviço de envio de SMS / Chamada de Voz automática (Twilio/AWS SNS) em caso de não confirmação"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-12",
+          "title": "Conexão da Rede de Apoio / Espelhamento do Cuidador",
+          "role": "Cuidador",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Fornece redundância de vigilância para pacientes vulneráveis (ex: crianças ou idosos).",
+          "summary": "Como cuidador (pai/mãe/cônjuge), quero visualizar em tempo real a curva de glicemia do paciente e receber alertas simultâneos de emergência.",
+          "acceptance_criteria": [
+            "GIVEN o aplicativo do Cuidador, WHEN conectado com permissão do paciente, THEN ele deve visualizar o widget atualizado via WebSockets em menos de 5 segundos após a leitura."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-12-01",
+              "title": "Desenvolver App/Painel do Cuidador com Sincronização via WebSockets",
+              "component": "Frontend Mobile & Web",
+              "story_points": 5,
+              "subtasks": [
+                "Criar canal Pub/Sub (Redis / WebSockets) para transmissão de eventos de glicemia entre contas pareadas",
+                "Desenvolver UI simplificada de monitoramento para parentes"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-22",
+          "title": "Lembretes Inteligentes de Medicação e Medição Capilar",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class A",
+          "iso_14971_mitigation": "Aumenta adesão ao tratamento e reduz episódios de esquecimento de insulina basal.",
+          "summary": "Como paciente, quero agendar e receber lembretes para aplicação de insulina basal ou teste de glicemia pós-prandial.",
+          "acceptance_criteria": [
+            "GIVEN a configuração de lembrete diário às 22:00 para Insulina Basal, WHEN der o horário, THEN o aplicativo deve emitir notificação interativa com opções: 'Aplicado', 'Adiar 15 min' ou 'Ignorar'."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-22-01",
+              "title": "Módulo de Notificações Locais Agendadas e Gestão de Adesão",
+              "component": "Frontend Mobile",
+              "story_points": 3,
+              "subtasks": [
+                "Implementar agendamento de alarmes locais via Android AlarmManager / iOS Local Notifications",
+                "Gravar estatísticas de adesão (doses tomadas no horário vs em atraso)"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "epic_id": "EPIC-05",
+      "name": "Dashboard Clínico, Relatórios Padronizados AGP & Telemedicina",
+      "description": "Visualização de dados populacionais e individuais para profissionais de saúde, geração de relatórios AGP e comunicação segura.",
+      "user_stories": [
+        {
+          "story_id": "US-08",
+          "title": "Dashboard de Acompanhamento do Paciente (TIR / AGP / GMI)",
+          "role": "Paciente",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Apresentação clara de dados sem distorção gráfica para evitar interpretação errônea de tendências.",
+          "summary": "Como paciente, quero visualizar meus indicadores de saúde (Time in Range, GMI/eA1c, Variabilidade Glicêmica) em gráficos claros.",
+          "acceptance_criteria": [
+            "GIVEN o dashboard do paciente, WHEN carregado com dados dos últimos 14 dias, THEN deve exibir as barras de percentual de TIR (Muito Baixa <54, Baixa 54-69, No Alvo 70-180, Alta 181-250, Muito Alta >250) rigorosamente segundo o padrão ADA."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-08-01",
+              "title": "Desenvolver Gráficos de Perfil Ambulatorial de Glicose (AGP) e Estatísticas TIR",
+              "component": "Frontend Mobile / Web",
+              "story_points": 5,
+              "subtasks": [
+                "Integrar biblioteca de gráficos de alta performance (D3.js / Victory Charts / SciChart)",
+                "Calcular métricas estatísticas de variabilidade (%CV, SD, GMI) no cliente/servidor"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-10",
+          "title": "Dashboard Clínico para Médico / Endocrinologista (Visão Populacional)",
+          "role": "Médico",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Permite triagem rápida de pacientes em risco iminente de descompensação glicêmica.",
+          "summary": "Como médico, quero visualizar minha carteira de pacientes ordenada por menor TIR ou maior tempo em hipoglicemia para priorizar atendimentos.",
+          "acceptance_criteria": [
+            "GIVEN o login médico na plataforma web, WHEN ele visualiza sua lista de pacientes, THEN a lista deve destacar em vermelho os pacientes com >4% de tempo em hipoglicemia (< 70 mg/dL) nas últimas 24h."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-10-01",
+              "title": "Portal Web do Médico com Triagem Populacional e Filtros Clínicos",
+              "component": "Frontend Web / Backend API",
+              "story_points": 5,
+              "subtasks": [
+                "Criar endpoints agregados de saúde para consultas de alta performance na carteira médica",
+                "Desenvolver interface web responsiva com tabela dinâmica e alertas visuais de risco"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-11",
+          "title": "Prescrição Digital & Aprovação de Metas Clínicas pelo Médico",
+          "role": "Médico",
+          "priority": "P0",
+          "samd_safety_class": "Class C",
+          "iso_14971_mitigation": "Garante validade jurídica e impede alteração não autorizada da prescrição terapêutica.",
+          "summary": "Como médico, quero prescrever o plano terapêutico e assinar digitalmente as metas glicêmicas com certificado ICP-Brasil.",
+          "acceptance_criteria": [
+            "GIVEN uma nova prescrição de insulina e metas, WHEN o médico clica em assinar, THEN o sistema valida o certificado digital ICP-Brasil (Assinatura Qualificada) e vincula a assinatura ao documento."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-11-01",
+              "title": "Integração de Assinatura Digital ICP-Brasil (PKI-Brazil) no Portal Médico",
+              "component": "Backend Security / Web",
+              "story_points": 8,
+              "subtasks": [
+                "Integrar SDK de assinatura digital (ex: Bry / ITI / Certisign)",
+                "Gerar PDF/A assinado da prescrição e persistir no histórico clínico do paciente"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-13",
+          "title": "Exportação de Relatório Padronizado AGP em PDF",
+          "role": "Paciente / Médico",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Padronização de relatórios conforme consenso da ADA (American Diabetes Association) para garantir interpretação uniforme.",
+          "summary": "Como paciente ou médico, quero exportar o relatório padronizado AGP em formato PDF de 1 página para impressão ou anexo em prontuário.",
+          "acceptance_criteria": [
+            "GIVEN o comando de exportação, WHEN executado, THEN um arquivo PDF vetorial de alta definição é gerado contendo: dados do paciente, estatísticas TIR, curva modal de 24h e log de episódios de hipoglicemia."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-13-01",
+              "title": "Microserviço Renderizador de Relatórios AGP em PDF (Headless Puppeteer / Canvas)",
+              "component": "Backend Microservice",
+              "story_points": 5,
+              "subtasks": [
+                "Criar template HTML/CSS em conformidade exata com o layout da International Diabetes Center (IDC)",
+                "Implementar renderização no servidor e upload para armazenamento seguro com URL temporária assinada"
+              ]
+            }
+          ]
+        },
+        {
+          "story_id": "US-21",
+          "title": "Módulo de Comunicação Criptografada Paciente-Equipe (Telemedicina)",
+          "role": "Paciente / Médico / Educador",
+          "priority": "P0",
+          "samd_safety_class": "Class B",
+          "iso_14971_mitigation": "Proteção E2EE (End-to-End Encryption) para trocas de mensagens contendo dados sensíveis de saúde.",
+          "summary": "Como paciente, quero enviar mensagens e fotos do diário alimentar diretamente para a equipe multidisciplinar de forma segura.",
+          "acceptance_criteria": [
+            "GIVEN o chat clínico, WHEN uma mensagem ou imagem de exame é enviada, THEN os dados são criptografados no dispositivo antes do envio e descriptografados apenas pelo destinatário autorizado."
+          ],
+          "tasks": [
+            {
+              "task_id": "TASK-21-01",
+              "title": "Implementar Chat Clínico Criptografado E2EE via Signal Protocol / WebSockets",
+              "component": "Backend / Mobile / Web",
+              "story_points": 8,
+              "subtasks": [
+                "Configurar troca de chaves assimétricas (Curve25519) entre cliente e portal médico",
+                "Desenvolver interface de chat com upload de anexos com varredura antivírus"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

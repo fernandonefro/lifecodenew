@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # POSTGRESQL + PGVECTOR (TIMEZONE UTC & VECTOR SEARCH FOR EMBEDDINGS)
+  # ============================================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: lifecode-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lifecode_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lifecode_sec_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-lifecode_db}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lifecode_admin} -d ${POSTGRES_DB:-lifecode_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # REDIS 7 (BULLMQ QUEUES, PUBSUB DE ALERTAS P0 & CACHE DE SESSÕES)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: lifecode-redis
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:-lifecode_redis_sec}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-lifecode_redis_sec}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # MAILPIT (TESTES DE ENVIO DE E-MAIL EM AMBIENTE DE DESENVOLVIMENTO LOCAL)
+  # ============================================================================
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lifecode-mailpit
+    restart: always
+    ports:
+      - "8025:8025" # Interface Web Mailpit Dashboard
+      - "1025:1025" # Porta SMTP
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+    volumes:
+      - mailpitdata:/data
+
+  # ============================================================================
+  # LIFECODE API SERVICE (NESTJS BACKEND)
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: lifecode-api
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      TZ: UTC
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lifecode_admin}:${POSTGRES_PASSWORD:-lifecode_sec_pass_2026}@postgres:5432/${POSTGRES_DB:-lifecode_db}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-lifecode_redis_sec}@redis:6379
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      JWT_SECRET: ${JWT_SECRET:-lifecode_jwt_samd_secret_key_2026_super_secure}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  mailpitdata:

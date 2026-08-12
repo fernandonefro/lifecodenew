@@ -1,0 +1,256 @@
+openapi: 3.0.3
+info:
+  title: Lifecode API - Plataforma de Cuidado e Gestão do Diabetes
+  description: >
+    API RESTful multi-tenant para gestão por exceção do diabetes, cobrindo ingestão de dados clínicos
+    com idempotência, motor de regras de alertas P0-P3, fila de atendimento e analytics populacional.
+  version: 1.0.0
+  contact:
+    name: Equipe de Engenharia e Arquitetura Lifecode
+    email: suporte-tecnica@lifecode.health
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Ambiente de Desenvolvimento Local
+  - url: https://staging-api.lifecode.health/api/v1
+    description: Ambiente de Homologação / Piloto
+
+paths:
+  /observations/glucose:
+    post:
+      summary: Ingestão de Medição de Glicemia (US-06 / US-10)
+      description: >
+        Recebe e valida dados de glicose provenientes do App Mobile ou Dispositivos Conectados.
+        Garante idempotência via `externalEventId` (CA-02) e dispara avaliação automática do Motor de Alertas (P0-P3).
+      security:
+        - BearerAuth: []
+          TenantHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlucoseIngestionDTO'
+      responses:
+        '201':
+          description: Observação registrada e processada com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: CREATED
+                  data:
+                    $ref: '#/components/schemas/ClinicalObservation'
+                  alertTriggered:
+                    type: string
+                    nullable: true
+                    enum: [P0, P1, P2, P3]
+                    example: P0
+        '400':
+          description: Dados inválidos ou valor fora dos limites plausíveis de segurança (CA-04).
+        '409':
+          description: Evento duplicado ignorado por idempotência (CA-02).
+
+  /alerts:
+    get:
+      summary: Fila de Alertas por Prioridade e SLA (US-13)
+      description: >
+        Retorna a fila de alertas do Portal Profissional ordenada por urgência dinâmica
+        (Peso de Severidade P0-P3 + Tempo de SLA prestes a estourar + Desvio Glicêmico).
+      security:
+        - BearerAuth: []
+          TenantHeader: []
+      parameters:
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [P0, P1, P2, P3]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [OPEN, IN_PROGRESS, RESOLVED, ESCALATED]
+      responses:
+        '200':
+          description: Lista de alertas ordenada por prioridade.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertResponse'
+
+  /alerts/{id}/claim:
+    post:
+      summary: Travar e Assumir Atendimento de Alerta (US-14)
+      description: Trava o alerta para o profissional logado, alterando o status para IN_PROGRESS e prevenindo concorrência.
+      security:
+        - BearerAuth: []
+          TenantHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Alerta assumido com sucesso.
+        '403':
+          description: Alerta já está sob atendimento de outro profissional.
+
+  /alerts/{id}/resolve:
+    post:
+      summary: Concluir Atendimento e Fechar Alerta (US-14)
+      description: Registra a conduta clínica obrigatória, categoria da resolução e encerra o alerta com rastro de auditoria imutável.
+      security:
+        - BearerAuth: []
+          TenantHeader: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveAlertDTO'
+      responses:
+        '200':
+          description: Alerta resolvido com sucesso e gravado em auditoria.
+
+  /operator/analytics/overview:
+    get:
+      summary: Painel Populacional da Operadora (US-21 / US-22)
+      description: Retorna métricas agregadas de estratificação de risco (Tiers 1-3) e monitoramento de lacunas de cuidado ativas.
+      security:
+        - BearerAuth: []
+          TenantHeader: []
+      responses:
+        '200':
+          description: Resumo populacional retornado.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    TenantHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-ID
+
+  schemas:
+    GlucoseIngestionDTO:
+      type: object
+      required:
+        - patientId
+        - externalEventId
+        - value
+        - unit
+        - sourceType
+        - measuredAt
+      properties:
+        patientId:
+          type: string
+          format: uuid
+        externalEventId:
+          type: string
+          example: mob_1723240000000
+        value:
+          type: number
+          minimum: 10
+          maximum: 1000
+          example: 45
+        unit:
+          type: string
+          enum: [mg/dL, mmol/L]
+          default: mg/dL
+        sourceType:
+          type: string
+          enum: [CGM, FLASH, CAPILLARY, MANUAL, LABORATORY]
+        context:
+          type: string
+          enum: [FASTING, PRE_PRANDIAL, POST_PRANDIAL, BEDTIME, NOCTURNAL, RANDOM]
+          default: FASTING
+        measuredAt:
+          type: string
+          format: date-time
+          example: '2026-08-09T10:00:00.000Z'
+        symptomsReported:
+          type: object
+          properties:
+            confusionOrAlteredConsciousness:
+              type: boolean
+            sweatingOrTremors:
+              type: boolean
+            vomitingOrKetoneSigns:
+              type: boolean
+
+    ClinicalObservation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        loincCode:
+          type: string
+          example: 15074-8
+        value:
+          type: number
+        unit:
+          type: string
+        measuredAt:
+          type: string
+          format: date-time
+
+    AlertResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        severity:
+          type: string
+          enum: [P0, P1, P2, P3]
+        status:
+          type: string
+          enum: [OPEN, IN_PROGRESS, RESOLVED, ESCALATED]
+        isOverdue:
+          type: boolean
+        minutesRemaining:
+          type: number
+
+    ResolveAlertDTO:
+      type: object
+      required:
+        - alertId
+        - category
+        - clinicalNotes
+      properties:
+        alertId:
+          type: string
+          format: uuid
+        category:
+          type: string
+          enum:
+            - PATIENT_CONTACTED_STABLE
+            - MEDICATION_ADJUSTED
+            - REFERRED_TO_EMERGENCY
+            - GLUCOSE_RETEST_ORDERED
+            - FALSE_POSITIVE_CALIBRATION
+        clinicalNotes:
+          type: string
+          minLength: 10
+          maxLength: 2000
