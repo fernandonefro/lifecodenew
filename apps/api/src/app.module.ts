@@ -3,11 +3,12 @@ import { SecurityModule } from './common/security/security.module';
 import { AuthModule } from './auth/auth.module';
 import { ObservationsModule } from './modules/observations/observations.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
+import { MedicationsModule } from './modules/medications/medications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
-  imports: [SecurityModule, AuthModule, ObservationsModule, AlertsModule, AnalyticsModule, HealthModule],
+  imports: [SecurityModule, AuthModule, ObservationsModule, AlertsModule, MedicationsModule, AnalyticsModule, HealthModule],
   controllers: [],
   providers: [],
 })
