@@ -5,3 +5,9 @@ dist
 .turbo
 *.log
 pnpm-debug.log*
+
+# Artefatos de build do TypeScript
+*.tsbuildinfo
+
+# Configurações locais do Claude Code (podem conter segredos/tokens)
+.claude/settings.local.json
