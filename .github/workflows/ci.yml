@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-test:
+    name: Build, typecheck & test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: lifecode_admin
+          POSTGRES_PASSWORD: lifecode_sec_pass_2026
+          POSTGRES_DB: lifecode_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lifecode_admin -d lifecode_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://lifecode_admin:lifecode_sec_pass_2026@localhost:5432/lifecode_db?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @lifecode/shared
+        run: pnpm --filter @lifecode/shared build
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @lifecode/database build
+
+      - name: Apply migrations (valida o schema no Postgres+pgvector)
+        run: pnpm --filter @lifecode/database exec prisma migrate deploy --schema=prisma/schema.prisma
+
+      - name: Typecheck API
+        run: pnpm --filter @lifecode/api exec tsc --noEmit
+
+      - name: Test API
+        run: pnpm --filter @lifecode/api test

@@ -1,3 +1,8 @@
+# ⚠️ SUPERADO / NÃO-CANÔNICO — mantido apenas como referência de design.
+# A fonte da verdade do contrato é o OpenAPI GERADO pela API (NestJS/Swagger),
+# que reflete as rotas reais: docs/openapi.generated.json (ou http://<api>/api/docs).
+# Este arquivo manual divergia das rotas reais (ex.: prefixo, endpoints de alerts/auth).
+# Ver docs/API.md.
 openapi: 3.0.3
 info:
   title: Lifecode API - Plataforma de Cuidado e Gestão do Diabetes
