@@ -1,55 +1,75 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { ConsentService } from '../../common/audit/consent.service';
 import { GlucoseIngestionProcessedDTO, AlertSeverity, GLUCOSE_LOINC_CODE } from '@lifecode/shared';
 
 @Injectable()
 export class GlucoseService {
   private readonly logger = new Logger(GlucoseService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  /** Fator de conversão UCUM mmol/L → mg/dL para glicose (mesmo do schema Zod). */
+  private static readonly MMOL_L_TO_MG_DL = 18.0182;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly consent: ConsentService,
+  ) {}
 
   async ingestGlucose(tenantId: string, dto: GlucoseIngestionProcessedDTO) {
-    const prismaAny = this.prisma as any;
+    // 0. Normaliza a unidade para mg/dL — o motor de regras e a persistência
+    //    operam SEMPRE em mg/dL. (Sem isto, uma leitura em mmol/L chegava crua
+    //    ao motor e gerava classificação de severidade errada.)
+    const reading = this.normalizeToMgDl(dto);
+
+    // 0b. Plausibilidade fisiológica (CA-04), já sobre o valor em mg/dL.
+    this.assertPhysiologicallyPlausible(reading.value);
+
+    // 0c. Consentimento LGPD/TCLE é pré-requisito da ingestão (bloqueia com 403).
+    const patientUserId = await this.consent.assertActiveConsent(tenantId, reading.patientId);
 
     // 1. Verificação de Idempotência (CA-02)
-    const existingObservation = await prismaAny.clinicalObservation.findFirst({
+    const existingObservation = await this.prisma.clinicalObservation.findFirst({
       where: {
         tenantId,
-        externalEventId: dto.externalEventId,
+        externalEventId: reading.externalEventId,
       },
     }).catch(() => null);
 
     if (existingObservation) {
-      this.logger.warn(`Ingestão duplicada ignorada (Idempotência): ${dto.externalEventId}`);
-      return { status: 'IDEMPOTENT_SKIPPED', data: existingObservation };
+      this.logger.warn(`Ingestão duplicada ignorada (Idempotência): ${reading.externalEventId}`);
+      return { status: 'IDEMPOTENT_SKIPPED', data: existingObservation, alertTriggered: null };
     }
 
     // 2. Transação: Salva a Observação e Avalia Regras do Motor Clínico
-    return await prismaAny.$transaction(async (tx: any) => {
-      // Grava a Observação Canônica
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Grava a Observação Canônica (valor canônico em mg/dL)
       const observation = await tx.clinicalObservation.create({
         data: {
           tenantId,
-          patientId: dto.patientId,
-          externalEventId: dto.externalEventId,
+          patientId: reading.patientId,
+          externalEventId: reading.externalEventId,
           loincCode: GLUCOSE_LOINC_CODE,
-          value: dto.value,
-          unit: dto.unit,
-          sourceType: dto.sourceType as any,
-          context: dto.context,
-          deviceId: dto.deviceId,
-          measuredAt: new Date(dto.measuredAt),
+          value: reading.value,
+          unit: reading.unit,
+          sourceType: reading.sourceType as any,
+          context: reading.context,
+          deviceId: reading.deviceId,
+          measuredAt: new Date(reading.measuredAt),
           ingestedAt: new Date(),
           validationStatus: 'VALIDATED',
           metadata: JSON.stringify({
-            symptoms: dto.symptomsReported,
-            notes: dto.notes,
+            symptoms: reading.symptomsReported,
+            notes: reading.notes,
+            originalValue: reading.originalValue,
+            originalUnit: reading.originalUnit,
           }),
         },
       });
 
       // 3. Motor de Regras Rápidas: Avaliação de Severidade (P0/P1)
-      const alertSeverity = this.evaluateGlucoseAlertRules(dto);
+      const alertSeverity = this.evaluateGlucoseAlertRules(reading);
 
       if (alertSeverity) {
         await tx.alert.create({
@@ -59,17 +79,54 @@ export class GlucoseService {
             observationId: observation.id,
             severity: alertSeverity,
             status: 'OPEN',
-            title: `Alerta Clínico ${alertSeverity}: Glicemia ${dto.value} mg/dL`,
-            message: this.buildAlertMessage(dto, alertSeverity),
+            title: `Alerta Clínico ${alertSeverity}: Glicemia ${reading.value} mg/dL`,
+            message: this.buildAlertMessage(reading, alertSeverity),
             dueDate: this.calculateSlaDueDate(alertSeverity),
           },
         });
 
-        this.logger.warn(`Alerta ${alertSeverity} gerado para o Paciente ${dto.patientId}`);
+        this.logger.warn(`Alerta ${alertSeverity} gerado para o Paciente ${reading.patientId}`);
       }
 
       return { status: 'CREATED', data: observation, alertTriggered: alertSeverity };
     });
+
+    // 4. Auditoria assinada (HMAC) da mutação clínica (mandato CLAUDE.md).
+    await this.audit.record({
+      tenantId,
+      userId: patientUserId,
+      action: 'INGEST_GLUCOSE',
+      resource: 'clinical_observation',
+      newValue: {
+        observationId: result.data.id,
+        value: reading.value,
+        unit: reading.unit,
+        alertTriggered: result.alertTriggered ?? null,
+      },
+    });
+
+    return result;
+  }
+
+  /**
+   * Histórico de glicemias de um paciente (mais recentes primeiro).
+   * Sempre isolado por tenant (CA-01).
+   */
+  async getPatientHistory(tenantId: string, patientId: string, limit = 30) {
+    const rows = await this.prisma.clinicalObservation.findMany({
+      where: { tenantId, patientId },
+      orderBy: { measuredAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        value: true,
+        unit: true,
+        measuredAt: true,
+        context: true,
+        sourceType: true,
+      },
+    });
+    return rows.map((r) => ({ ...r, value: Number(r.value) }));
   }
 
   /**
@@ -95,6 +152,37 @@ export class GlucoseService {
     }
 
     return null;
+  }
+
+  /**
+   * Normaliza a leitura para mg/dL (unidade canônica do motor de regras).
+   * Preserva o valor/unidade originais para rastreabilidade.
+   */
+  private normalizeToMgDl(
+    dto: GlucoseIngestionProcessedDTO,
+  ): GlucoseIngestionProcessedDTO & { originalValue: number; originalUnit: string } {
+    if (dto.unit === 'mmol/L') {
+      return {
+        ...dto,
+        value: Math.round(dto.value * GlucoseService.MMOL_L_TO_MG_DL),
+        unit: 'mg/dL',
+        originalValue: dto.value,
+        originalUnit: 'mmol/L',
+      };
+    }
+    return { ...dto, originalValue: dto.value, originalUnit: dto.unit };
+  }
+
+  /**
+   * Barreira de plausibilidade fisiológica (CA-04), avaliada em mg/dL.
+   * Substitui os limites @Min/@Max do DTO, que eram cegos à unidade.
+   */
+  private assertPhysiologicallyPlausible(valueMgDl: number): void {
+    if (!Number.isFinite(valueMgDl) || valueMgDl < 10 || valueMgDl > 1000) {
+      throw new BadRequestException(
+        'Valor de glicemia fora do limite físico plausível (10–1000 mg/dL).',
+      );
+    }
   }
 
   private buildAlertMessage(dto: GlucoseIngestionProcessedDTO, severity: AlertSeverity): string {

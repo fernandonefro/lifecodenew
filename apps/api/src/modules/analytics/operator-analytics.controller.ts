@@ -10,7 +10,7 @@ import { Roles, Role } from '../../auth/roles.decorator';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Role.ANALISTA_OPERADORA, Role.GESTOR_CLINICA, Role.ADMIN)
-@Controller('api/v1/operator/analytics')
+@Controller('operator/analytics')
 export class OperatorAnalyticsController {
   constructor(private readonly operatorAnalyticsService: OperatorAnalyticsService) {}
 

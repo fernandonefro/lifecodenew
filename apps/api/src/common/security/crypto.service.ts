@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -7,9 +7,30 @@ export class CryptoService {
   private readonly secretKey: Buffer;
 
   constructor() {
-    // Chave de 32 bytes (256 bits) para o algoritmo AES-256-GCM
-    const rawSecret = process.env.FIELD_ENCRYPTION_KEY || 'lifecode_aes_256_gcm_secret_key_32bytes!!';
-    this.secretKey = crypto.scryptSync(rawSecret, 'lifecode_salt_samd', 32);
+    // Deriva a chave de 32 bytes (256 bits) para AES-256-GCM a partir do segredo.
+    this.secretKey = crypto.scryptSync(CryptoService.resolveSecret(), 'lifecode_salt_samd', 32);
+  }
+
+  /**
+   * Resolve o segredo de criptografia a partir de ENCRYPTION_KEY (nome único,
+   * alinhado ao docker-compose e ao .env). Em produção, a ausência é FATAL —
+   * nunca cair numa chave hardcoded. Fora de produção, usa um valor de dev
+   * explícito e avisa (sem jamais logar o valor da chave).
+   */
+  private static resolveSecret(): string {
+    const key = process.env.ENCRYPTION_KEY;
+    if (key && key.trim().length > 0) return key;
+
+    if (process.env.NODE_ENV === 'production') {
+      throw new InternalServerErrorException(
+        'ENCRYPTION_KEY ausente: defina a chave AES-256 (32 bytes) em produção.',
+      );
+    }
+
+    new Logger(CryptoService.name).warn(
+      'ENCRYPTION_KEY não definida — usando chave de DESENVOLVIMENTO. NUNCA use em produção.',
+    );
+    return 'dev_only_insecure_encryption_key_change_me';
   }
 
   /**

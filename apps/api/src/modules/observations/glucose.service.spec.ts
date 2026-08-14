@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GlucoseService } from './glucose.service';
 import { PrismaService } from '../../database/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { ConsentService } from '../../common/audit/consent.service';
 import { GOLDEN_CLINICAL_TEST_CASES } from '@lifecode/shared';
 
 describe('GlucoseService - Suíte de Validação de Casos-Ouro Clínicos', () => {
@@ -23,6 +25,8 @@ describe('GlucoseService - Suíte de Validação de Casos-Ouro Clínicos', () =>
       providers: [
         GlucoseService,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: AuditService, useValue: { record: jest.fn() } },
+        { provide: ConsentService, useValue: { assertActiveConsent: jest.fn().mockResolvedValue('user-golden') } },
       ],
     }).compile();
 
