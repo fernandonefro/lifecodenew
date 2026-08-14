@@ -20,6 +20,7 @@ import {
   MeasurementContext 
 } from '@lifecode/shared';
 import { useGlucoseIngestion } from '../hooks/useGlucoseIngestion';
+import { getPatientId } from '../lib/session';
 
 export default function GlucoseEntryScreen() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function GlucoseEntryScreen() {
   const { control, handleSubmit, setValue, watch, formState: { errors } } = useForm<GlucoseIngestionDTO>({
     resolver: zodResolver(glucoseIngestionSchema),
     defaultValues: {
-      patientId: 'a1b2c3d4-e5f6-7890-1234-567890abcdef', // Substituído pelo Contexto de Auth em Prod
+      patientId: getPatientId() ?? 'a1b2c3d4-e5f6-7890-1234-567890abcdef', // sessão (fallback dev)
       externalEventId: `mob_${Date.now()}`,
       value: undefined,
       unit: 'mg/dL',
