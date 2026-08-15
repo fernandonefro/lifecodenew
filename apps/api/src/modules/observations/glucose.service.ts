@@ -3,6 +3,8 @@ import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ConsentService } from '../../common/audit/consent.service';
 import { GlucoseIngestionProcessedDTO, AlertSeverity, GLUCOSE_LOINC_CODE } from '@lifecode/shared';
+import { isGlucoseShadowEnabled } from '../../config/feature-flags';
+import { evaluateGlucoseInShadow } from './glucose-shadow';
 
 @Injectable()
 export class GlucoseService {
@@ -104,6 +106,27 @@ export class GlucoseService {
         alertTriggered: result.alertTriggered ?? null,
       },
     });
+
+    // 5. Motor de regras candidatas em modo SHADOW (ADR-0002) — OBSERVACIONAL.
+    //    Desligado por padrão; quando ligado, apenas registra a avaliação de forma
+    //    desidentificada (sem valores/PII) e NUNCA cria alerta/tarefa/mensagem.
+    //    Best-effort: qualquer falha aqui é ignorada e não afeta a ingestão nem o alerta legado.
+    if (isGlucoseShadowEnabled()) {
+      try {
+        const outcomes = evaluateGlucoseInShadow({
+          glucoseMgDl: reading.value,
+          sensorValid: true,
+          confusion: reading.symptomsReported?.confusionOrAlteredConsciousness,
+          persistentVomiting: reading.symptomsReported?.vomitingOrKetoneSigns,
+        });
+        const emitted = outcomes.filter((o) => o.emit).length;
+        this.logger.debug(
+          `[SHADOW] regras avaliadas=${outcomes.length} emit=${emitted} (esperado 0)`,
+        );
+      } catch {
+        this.logger.warn('[SHADOW] avaliação candidata falhou — ignorada (sem efeito no fluxo)');
+      }
+    }
 
     return result;
   }
