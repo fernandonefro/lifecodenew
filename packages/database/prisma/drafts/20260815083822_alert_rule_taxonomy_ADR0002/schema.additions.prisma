@@ -1,0 +1,38 @@
+// RASCUNHO — trecho a ser MESCLADO no packages/database/prisma/schema.prisma canônico
+// quando a migração for promovida. Todos os campos NULLABLE e ADITIVOS (ADR-0002).
+// NÃO altera o schema canônico ainda (evita drift do Prisma Client e risco no CI).
+
+model Alert {
+  // ... campos existentes permanecem inalterados ...
+
+  // --- ADITIVO (ADR-0002): taxonomia e proveniência da regra que gerou o alerta ---
+  alertDomain           String?   // CLINICAL | DEVICE | CARE_MANAGEMENT
+  alertSubtype          String?   // ver AlertSubtype em @lifecode/shared
+  ruleCode              String?
+  ruleVersion           String?
+
+  // Referência à lacuna assistencial (CareGap = fonte-da-verdade; não duplicar estado clínico).
+  careGapId             String?   @db.Uuid
+  sourceEntityType      String?   // ex.: "CARE_GAP"
+  sourceEntityId        String?   @db.Uuid
+
+  // Snapshot de contexto de risco (imutável; capturado no momento da decisão).
+  riskProfileCode       String?
+  riskProfileVersion    String?
+  riskProfileCapturedAt DateTime? @db.Timestamptz(6)
+
+  // Deduplicação de incidentes.
+  episodeKey            String?
+
+  @@index([tenantId, patientId, ruleCode, ruleVersion], name: "alerts_dedup_idx")
+}
+
+// Estados adicionais do ciclo de vida de incidente (ADITIVO).
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS // novo (ADR-0002)
+  RESOLVED
+  ESCALATED   // novo (ADR-0002)
+  CANCELLED   // novo (ADR-0002)
+}
