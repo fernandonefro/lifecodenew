@@ -452,6 +452,50 @@ header.topbar{position:sticky;top:0;z-index:40;margin:0;padding:15px 18px;backgr
 .te-warn{background:var(--warn-bg)!important;color:var(--warn)!important}
 .te-bad{background:var(--bad-bg)!important;color:var(--crit)!important}
 .ajuda-body p{font-size:12.5px;line-height:1.5;margin:0 0 10px}
+/* ============================================================
+   CAMADA DE LEGIBILIDADE / RESPONSIVIDADE (somente UI).
+   Não altera dados, regras de negócio, importação de XLSX,
+   localStorage, filtros nem cálculos. Sobe a escala tipográfica
+   e as alturas de controle para conforto em zoom 100%
+   (1366×768 / 1440×900 / 1920×1080). NÃO usa zoom/scale global.
+   ============================================================ */
+body{font-size:16px;line-height:1.55}
+
+/* Tabelas: legibilidade (o bloco de redesign havia reduzido p/ 12.5px / .75rem) */
+table{font-size:14px}
+thead th{font-size:12px;padding:11px 14px}
+table td{padding:11px 14px;font-size:14px}
+
+/* KPIs: números 28–34px, rótulos ≥14px, respiro interno adequado */
+.kpi{padding:18px 20px}
+.kpi .n{font-size:clamp(28px,2.2vw,34px)}
+.kpi .l{font-size:14px;line-height:1.3}
+
+/* Títulos de seção 20–24px */
+.panel-head h2{font-size:22px}
+.panel-head .muted{font-size:13px}
+
+/* Campos e filtros: altura mínima 44px, texto ≥14px */
+.list-controls input,.list-controls select,
+.task-filters input,.task-filters select{font-size:15px;min-height:44px;padding:10px 13px}
+.chip-clear{min-height:40px;font-size:14px;padding:8px 14px}
+
+/* Botões: altura mínima ~44px, texto ≥15px */
+.upload-btn,.btn-kanban-patient{min-height:44px;font-size:15px;padding:10px 16px}
+.tab,.pd-tab{font-size:15px;padding:12px 16px;min-height:44px}
+.scope-btn{min-height:40px;font-size:14px}
+
+/* Textos secundários e metadados: piso de 12–13px (eram 10–11.5px) */
+.topbar .sub,.topbar .who,.topbar .who b{font-size:13px}
+.status-txt{font-size:12.5px}
+.pt-meta,.prio-just,.pd-head .who2{font-size:13px}
+.pill{font-size:12.5px;padding:3px 10px}
+.pill.mini{font-size:11.5px}
+.tab .b{font-size:11px}
+
+/* Responsividade: filtros quebram antes; contêineres de tabela nunca estouram a página */
+@media(max-width:1024px){.list-controls,.task-filters{grid-template-columns:1fr 1fr}}
+.list-scroll,.table-wrap,.jc-scroll,.tasklist-wrap,.swim{max-width:100%}
 </style>
 </head>
 <body>
