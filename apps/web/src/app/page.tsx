@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { MedicalDashboardNavLink } from '@/lib/MedicalDashboardNavLink';
 
 export default function HomePage() {
   return (
@@ -21,6 +22,7 @@ export default function HomePage() {
         >
           Portal Profissional (Carteira)
         </a>
+        <MedicalDashboardNavLink />
       </div>
     </div>
   );
