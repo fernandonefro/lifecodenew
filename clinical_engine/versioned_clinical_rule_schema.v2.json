@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LifecodeVersionedClinicalRule v2",
+  "description": "Modelo declarativo de regra clínica/operacional reconciliado com a governança do ADR-0002. Substitui versioned_clinical_rule_schema.json (legado). NÃO presume classe IEC 62304 nem anvisaClearanceHash — regulatoryAssessmentStatus começa PENDING.",
+  "type": "object",
+  "required": [
+    "ruleCode",
+    "ruleVersion",
+    "alertDomain",
+    "alertSubtype",
+    "eligiblePopulation",
+    "entryCondition",
+    "deploymentStatus",
+    "governanceStatus",
+    "regulatoryAssessmentStatus"
+  ],
+  "properties": {
+    "ruleCode": { "type": "string" },
+    "ruleVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[A-Za-z0-9.]+)?$" },
+    "alertDomain": { "type": "string", "enum": ["CLINICAL", "DEVICE", "CARE_MANAGEMENT"] },
+    "alertSubtype": {
+      "type": "string",
+      "enum": [
+        "HYPOGLYCEMIA_LEVEL_1",
+        "HYPOGLYCEMIA_LEVEL_2",
+        "HYPOGLYCEMIA_LEVEL_3",
+        "HYPERGLYCEMIA_MARKED",
+        "HYPERGLYCEMIA_SUSTAINED",
+        "SUSPECTED_DKA",
+        "CGM_DATA_GAP",
+        "CGM_DATA_GAP_PERSISTENT",
+        "CARE_GAP",
+        "OPPORTUNITY"
+      ]
+    },
+    "eligiblePopulation": { "type": "string" },
+    "entryCondition": { "type": "string" },
+    "exitCondition": { "type": "string" },
+    "temporalWindow": {
+      "type": "object",
+      "properties": {
+        "sustainedMinutes": { "type": "integer" },
+        "windowDays": { "type": "integer" },
+        "minValidDataFraction": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "repetitionPolicy": {
+      "type": "object",
+      "properties": {
+        "evaluateEvery": { "type": "string", "enum": ["PER_READING", "HOURLY", "DAILY"] },
+        "notifyAtMost": { "type": "string", "enum": ["HOURLY", "DAILY", "WEEKLY"] },
+        "reopenSeparationMinutes": { "type": "integer" }
+      }
+    },
+    "symptomsAndModifiers": { "type": "array", "items": { "type": "string" } },
+    "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3"] },
+    "acknowledgementSla": { "type": "string" },
+    "interventionSla": { "type": "string" },
+    "escalationPolicy": { "type": "string" },
+    "patientMessageTemplateId": { "type": "string" },
+    "teamAction": { "type": "string" },
+    "clinicalRationale": { "type": "string" },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "url"],
+        "properties": { "label": { "type": "string" }, "url": { "type": "string", "format": "uri" } }
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["approvalType", "approverUserId", "ruleCode", "ruleVersion", "decision", "rationale", "approvedAt"],
+        "properties": {
+          "approvalType": { "type": "string", "enum": ["CLINICAL", "REGULATORY", "TECHNICAL", "RELEASE"] },
+          "approverUserId": { "type": "string", "format": "uuid" },
+          "ruleCode": { "type": "string" },
+          "ruleVersion": { "type": "string" },
+          "decision": { "type": "string", "enum": ["APPROVED", "REJECTED"] },
+          "rationale": { "type": "string" },
+          "approvedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "riskProfileCode": {
+      "type": "string",
+      "enum": [
+        "GLYCEMIC_TARGET_STANDARD",
+        "GLYCEMIC_TARGET_OLDER_HIGH_RISK",
+        "GLYCEMIC_TARGET_INDIVIDUALIZED",
+        "GLYCEMIC_TARGET_PREGNANCY"
+      ]
+    },
+    "riskProfileVersion": { "type": "string" },
+    "goldenPositiveCaseIds": { "type": "array", "items": { "type": "string" } },
+    "goldenNegativeCaseIds": { "type": "array", "items": { "type": "string" } },
+    "deploymentStatus": { "type": "string", "enum": ["DISABLED", "SHADOW", "ACTIVE"] },
+    "governanceStatus": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "LEGACY_UNREVIEWED",
+        "CLINICALLY_APPROVED",
+        "REGULATORY_ASSESSED",
+        "TECHNICALLY_VALIDATED",
+        "RELEASE_APPROVED",
+        "RETIRED"
+      ]
+    },
+    "regulatoryAssessmentStatus": { "type": "string", "enum": ["PENDING", "IN_REVIEW", "ASSESSED"] },
+    "effectiveFrom": { "type": "string", "format": "date-time" },
+    "effectiveTo": { "type": "string", "format": "date-time" },
+    "deprecatedByRuleCode": { "type": "string" },
+    "deprecatedByRuleVersion": { "type": "string" },
+    "legacySemanticAlias": { "type": "string" }
+  }
+}

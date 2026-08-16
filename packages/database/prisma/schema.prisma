@@ -96,6 +96,7 @@ model Tenant {
   careGaps             CareGap[]
   populationMetrics    PopulationMetric[]
   riskStratifications  RiskStratification[]
+  medications          Medication[]
 
   @@map("tenants")
 }
@@ -200,6 +201,7 @@ model Patient {
   alerts               Alert[]
   careGaps             CareGap[]
   riskStratifications  RiskStratification[]
+  medications          Medication[]
 
   @@index([tenantId, mrn])
   @@map("patients")
@@ -240,6 +242,14 @@ model Alert {
   title         String
   message       String
   dueDate       DateTime    @db.Timestamptz(6)
+
+  // Fila de atendimento (A4): assunção (lock) e resolução
+  assignedToUserId String?   @db.Uuid
+  acknowledgedAt   DateTime? @db.Timestamptz(6)
+  disposition      String? // conduta clínica no fechamento
+  resolutionNotes  String?
+  resolvedAt       DateTime? @db.Timestamptz(6)
+
   createdAt     DateTime    @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
 
@@ -248,6 +258,7 @@ model Alert {
 
   @@index([tenantId, severity, status])
   @@index([patientId, status])
+  @@index([assignedToUserId])
   @@map("alerts")
 }
 
@@ -313,4 +324,31 @@ model PopulationMetric {
 
   @@unique([tenantId, periodMonth])
   @@map("population_metrics")
+}
+
+// ============================================================================
+// MEDICAÇÕES ANTIDIABÉTICAS / INSULINA EM USO (V3.4 — Diabetes Dados)
+// ============================================================================
+
+model Medication {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  patientId String    @db.Uuid
+  name      String // ex: "Metformina", "Insulina NPH", "Empagliflozina"
+  drugClass String? // ex: "biguanida", "insulina_basal", "iSGLT2", "agonista_GLP1"
+  dose      String? // ex: "850mg", "10U"
+  frequency String? // ex: "2x/dia", "ao_deitar"
+  route     String    @default("oral") // "oral" | "subcutanea"
+  startDate DateTime  @db.Date
+  endDate   DateTime? @db.Date // NULL = em uso
+  active    Boolean   @default(true)
+  notes     String?
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, patientId, active])
+  @@map("medications")
 }

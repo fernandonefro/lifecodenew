@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsEnum, IsOptional, IsUUID, IsDateString, IsBoolean, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsEnum, IsOptional, IsUUID, IsDateString, IsBoolean, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MeasurementSource, MeasurementContext } from '@lifecode/shared';
 
@@ -33,10 +34,12 @@ export class IngestGlucoseDto {
   @IsString()
   externalEventId: string;
 
-  @ApiProperty({ description: 'Valor da glicemia', minimum: 10, maximum: 1000 })
+  // A plausibilidade fisiológica (10–1000 mg/dL, CA-04) é validada no
+  // GlucoseService APÓS a normalização de unidade — um @Min/@Max fixo aqui
+  // seria "cego à unidade" e rejeitaria leituras válidas em mmol/L
+  // (ex.: 5 mmol/L = 90 mg/dL cairia abaixo de 10).
+  @ApiProperty({ description: 'Valor da glicemia (na unidade informada em "unit")' })
   @IsNumber()
-  @Min(10, { message: 'Valor abaixo do limite físico plausível (mínimo 10 mg/dL).' })
-  @Max(1000, { message: 'Valor acima do limite físico plausível (máximo 1000 mg/dL).' })
   value: number;
 
   @ApiProperty({ description: 'Unidade de medida (UCUM)', enum: ['mg/dL', 'mmol/L'], default: 'mg/dL' })
@@ -63,6 +66,8 @@ export class IngestGlucoseDto {
 
   @ApiPropertyOptional({ description: 'Sintomas relatados pelo paciente', type: SymptomsReportedDto })
   @IsOptional()
+  @ValidateNested()
+  @Type(() => SymptomsReportedDto)
   symptomsReported?: SymptomsReportedDto;
 
   @ApiPropertyOptional({ description: 'Observações adicionais', maxLength: 500 })

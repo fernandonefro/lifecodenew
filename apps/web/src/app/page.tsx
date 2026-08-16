@@ -10,17 +10,17 @@ export default function HomePage() {
       </p>
       <div className="flex gap-4">
         <Link
-          href="/operator"
+          href="/dashboard"
           className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold transition text-sm"
         >
           Portal da Operadora (US-21/22)
         </Link>
-        <Link
-          href="/dashboard"
+        <a
+          href="/portal-profissional.html"
           className="px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition text-sm"
         >
-          Portal Profissional (US-13/14)
-        </Link>
+          Portal Profissional (Carteira)
+        </a>
       </div>
     </div>
   );
