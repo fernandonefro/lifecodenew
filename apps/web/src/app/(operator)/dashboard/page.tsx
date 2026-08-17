@@ -38,6 +38,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     try {
       const res = await fetch(`${API_BASE}/operator/analytics/overview`, { headers: getAuthHeaders() });
       if (res.status === 401) return onLogout();
+      if (res.status === 403) {
+        throw new Error('Seu usuário não tem acesso ao Portal da Operadora. Saia e entre como analista@ ou gestor@.');
+      }
       if (!res.ok) throw new Error('Falha ao carregar as métricas populacionais.');
       setData(await res.json());
     } catch (err: any) {
@@ -56,7 +59,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     return (
       <div className="p-12 text-center bg-slate-50 min-h-screen">
         <p className="text-red-600 font-semibold mb-4">{error}</p>
-        <button onClick={load} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold">Tentar novamente</button>
+        <div className="flex gap-3 justify-center">
+          <button onClick={load} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold">Tentar novamente</button>
+          <button onClick={onLogout} className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg font-bold hover:bg-slate-100">Sair / trocar usuário</button>
+        </div>
       </div>
     );
   }
